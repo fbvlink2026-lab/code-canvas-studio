@@ -1,4 +1,4 @@
-// === Dola Visual Editor — Bersyon 0.3 (Universal: Gumagana sa LAHAT) ===
+// === Dola Visual Editor — Bersyon 0.4 (Safe Selection: Hindi Agad Tumatakbo ang Function) ===
 
 const codeInput = document.getElementById('codeInput');
 const previewFrame = document.getElementById('previewFrame');
@@ -18,14 +18,17 @@ let dragOffset = { x:0, y:0 };
 let resizeDir = '';
 let startRect = null;
 let resizeHandles = {};
-let originalPositions = new WeakMap(); // Tandaan ang orihinal na pwesto
+let originalPositions = new WeakMap();
 
-// Halimbawang pagsisimula — LAHAT gumagana!
+// ✅ BAGONG KATANGIAN: Ipagana o hindi ang orihinal na aksyon
+let actionsEnabled = false; // NAKA-OFF muna bilang default
+
+// Halimbawang pagsisimula — may mga pindutan na may aksyon
 const defaultHTML = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Universal Editor</title>
+  <title>Safe Selection Editor</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { 
@@ -42,11 +45,8 @@ const defaultHTML = `<!DOCTYPE html>
       border-radius: 6px;
       display: inline-block;
     }
-    p {
-      color: #555;
-      margin: 15px 0;
-      line-height: 1.6;
-    }
+    p { color: #555; margin: 15px 0; line-height: 1.6; }
+    
     .kahon {
       background: #4ecdc4;
       padding: 20px;
@@ -62,7 +62,10 @@ const defaultHTML = `<!DOCTYPE html>
       border-radius: 4px;
       cursor: pointer;
       margin: 10px 5px;
+      font-size: 15px;
     }
+    .pindutan:hover { opacity: 0.9; }
+    
     .card {
       background: white;
       border: 1px solid #ddd;
@@ -71,40 +74,47 @@ const defaultHTML = `<!DOCTYPE html>
       margin: 20px 0;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
-    img {
-      max-width: 100%;
-      border-radius: 6px;
-      margin: 10px 0;
+    a { color: #4ecdc4; text-decoration: none; font-weight: bold; }
+    a:hover { text-decoration: underline; }
+    
+    .note {
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 12px;
+      margin: 15px 0;
+      color: #856404;
     }
-    ul { margin: 15px 30px; }
-    li { margin: 5px 0; }
   </style>
 </head>
 <body>
-  <h1>Kamusta! LAHAT ay pwedeng hilahin!</h1>
+  <h1>✅ Ligtas na Pagpili — Hindi Agad Tumatakbo!</h1>
   
-  <p>Ito ay karaniwang talata — walang espesyal na istilo. Pwede mo akong ilipat kahit saan!</p>
-  
-  <div class="kahon">
-    Kahon — hilahin ako sa kahit anong pwesto sa pahina!
-  </div>
-  
-  <button class="pindutan">Pindutin Ako</button>
-  <button class="pindutan">Isa pang Pindutan</button>
-  
-  <div class="card">
-    <h3>Impormasyon</h3>
-    <p>Baguhin ang laki sa pamamagitan ng paghila sa gilid o kanto.</p>
-    <ul>
-      <li>Punto una</li>
-      <li>Punto pangalawa — kahit listahan!</li>
-      <li>Pangatlong punto</li>
-    </ul>
+  <p class="note">
+    Sa preview, kapag pinindot mo ang pindutan o link — <strong>pipiliin muna ito</strong>, hindi agad pupunta sa ibang pahina o tatakbo ang code.
+  </p>
+
+  <div class="kahon" id="unangKahon">
+    Kahon — hilahin ako sa kahit saan!
   </div>
 
-  <footer style="margin-top: 40px; padding: 15px; background: #333; color: white; text-align: center;">
-    Ito ang paanan ng pahina — ako rin ay pwedeng ilipat!
-  </footer>
+  <!-- Pindutan na may JavaScript -->
+  <button class="pindutan" onclick="alert('Tumakbo ang orihinal na function! ✅')">
+    Pindutan — may nakakabit na function
+  </button>
+
+  <!-- Link na pupunta sa ibang pahina -->
+  <a href="#ibang-bahagi" class="pindutan">Link — ibang bahagi ng pahina</a>
+  
+  <a href="https://example.com" target="_blank" class="pindutan">Panlabas na Link</a>
+
+  <div class="card" id="ibang-bahagi">
+    <h3>Isa pang Bahagi</h3>
+    <p>Ito ang nilalaman. Lahat ng nakikita mo ay pwedeng ilipat at baguhin ang laki.</p>
+    <button class="pindutan" onclick="document.body.style.background='#e3f2fd'">
+      Baguhin ang Kulay
+    </button>
+  </div>
+
 </body>
 </html>`;
 
@@ -122,41 +132,69 @@ function iRefreshPreview() {
   doc.write(codeInput.value);
   doc.close();
   
-  // Siguraduhin na ang katawan ay pwedeng paglagyan
   doc.body.style.position = 'relative';
   doc.body.style.minHeight = '150vh';
   
-  // Bigyan ng oras para magkumpleto ang pag-render
-  setTimeout(() => iIkabitPreviewEvents(doc), 20);
+  setTimeout(() => {
+    iIkabitPreviewEvents(doc);
+    iIpaganaOIpigilanAksyon(doc); // ✅ Ipigilan o ipagana ang mga aksyon
+  }, 20);
+}
+
+// --- ✅ PIGILAN ANG MGA AKSYON HABANG NAG-EEDIT ---
+function iIpaganaOIpigilanAksyon(doc) {
+  const interactiveElements = doc.querySelectorAll('a, button, [onclick], input, select, form');
+  
+  interactiveElements.forEach(el => {
+    // Alisin ang dating listener para hindi dumami
+    if (el._editorHandler) {
+      el.removeEventListener('click', el._editorHandler, true);
+    }
+    
+    el._editorHandler = function(e) {
+      // Kung NAKA-OFF ang aksyon → pigilan at piliin lang ang elemento
+      if (!actionsEnabled) {
+        e.preventDefault();
+        e.stopPropagation();
+        iPiliElement(el);
+        return false;
+      }
+      // Kung NAKA-ON → hayaan ang orihinal na kilos
+    };
+    
+    // Gamitin ang capture phase para maunahan ang orihinal na handler
+    el.addEventListener('click', el._editorHandler, true);
+  });
 }
 
 // --- IKABIT SA LAHAT NG ELEMENTO ---
 function iIkabitPreviewEvents(doc) {
-  // Tanggalin ang dating pagpili
   selectedElement = null;
   iAlisinResizeHandles();
 
-  // KUNIN ANG LAHAT — hindi lang direct children!
   const allElements = doc.querySelectorAll('*');
   
   allElements.forEach(el => {
-    // Laktawan ang mga hindi kailangang i-edit
     if (['STYLE','SCRIPT','META','HEAD','TITLE','IFRAME'].includes(el.tagName)) return;
     
-    // Alisin ang dating handlers para hindi dumami
-    el.onmousedown = null;
     el.classList.remove('selectable-element', 'selected-element');
-    
     el.classList.add('selectable-element');
     
     el.onmousedown = (e) => {
       if (e.target.classList.contains('resize-handle')) return;
+      
+      // Kung may nakapiling na at nag-click sa pareho → huwag pigilan
+      if (selectedElement === el && actionsEnabled) {
+        // Hayaan ang orihinal na kilos kung naka-enable
+        return;
+      }
+      
       e.preventDefault();
       e.stopPropagation();
       
       iPiliElement(el);
       
-      // SIMULANG HILAHIN — i-convert sa absolute kung hindi pa
+      // Awtomatikong gawing absolute kung kailangan
       const currPos = getComputedStyle(el).position;
       if (currPos !== 'absolute' && currPos !== 'fixed') {
         iGawingAbsolute(el);
@@ -169,40 +207,31 @@ function iIkabitPreviewEvents(doc) {
       dragOffset.x = e.clientX - rect.left;
       dragOffset.y = e.clientY - rect.top;
       
-      startRect = { 
-        width: rect.width,
-        height: rect.height
-      };
+      startRect = { width: rect.width, height: rect.height };
     };
   });
 
-  // Pangkalahatang paggalaw ng mouse
   doc.addEventListener('mousemove', iHawakanMouseMove);
   doc.addEventListener('mouseup', iTaposMouse);
   doc.addEventListener('mouseleave', iTaposMouse);
 }
 
-// --- I-convert sa Absolute nang Tumpak ---
+// --- I-convert sa Absolute ---
 function iGawingAbsolute(el) {
   const rect = el.getBoundingClientRect();
-  const frameRect = previewFrame.getBoundingClientRect();
   const parent = el.parentElement;
   const parentRect = parent.getBoundingClientRect();
   
-  // Kumuha ng orihinal na pwesto kumpara sa magulang
   const origTop = rect.top - parentRect.top - parseFloat(getComputedStyle(parent).paddingTop || 0);
   const origLeft = rect.left - parentRect.left - parseFloat(getComputedStyle(parent).paddingLeft || 0);
   
   originalPositions.set(el, { top: origTop, left: origLeft });
   
-  // Ilapat ang absolute
   el.style.position = 'absolute';
   el.style.top = `${origTop}px`;
   el.style.left = `${origLeft}px`;
   el.style.right = 'auto';
   el.style.bottom = 'auto';
-  
-  // Alisin ang margin para hindi magbago ang pwesto
   el.style.margin = '0';
 }
 
@@ -216,7 +245,6 @@ function iPiliElement(el) {
   selectedElement = el;
   el.classList.add('selected-element');
   
-  // Siguraduhing absolute bago maglagay ng handles
   const pos = getComputedStyle(el).position;
   if (pos === 'static' || pos === 'relative') {
     el.style.position = 'relative';
@@ -254,7 +282,6 @@ function iLikhaResizeHandles(el) {
       e.preventDefault();
       e.stopPropagation();
       
-      // Siguraduhing absolute
       if (getComputedStyle(el).position === 'static') {
         el.style.position = 'absolute';
         const rect = el.getBoundingClientRect();
@@ -280,10 +307,7 @@ function iAyusinHandlePosisyon(el) {
   if (!selectedElement) return;
   
   const setPos = (handle, top, left) => {
-    if (handle) {
-      handle.style.top = top;
-      handle.style.left = left;
-    }
+    if (handle) { handle.style.top = top; handle.style.left = left; }
   };
   
   setPos(resizeHandles['top'], '-5px', 'calc(50% - 5px)');
@@ -307,7 +331,6 @@ function iHawakanMouseMove(e) {
   
   const frameRect = previewFrame.getBoundingClientRect();
   
-  // === PAGHILA ===
   if (isDragging && !isResizing) {
     const newLeft = e.clientX - frameRect.left - dragOffset.x;
     const newTop = e.clientY - frameRect.top - dragOffset.y;
@@ -320,24 +343,16 @@ function iHawakanMouseMove(e) {
     iAyusinHandlePosisyon(selectedElement);
   }
   
-  // === PAGBABAGO NG LAKI ===
   if (isResizing) {
     const dx = e.clientX - startRect.clientX;
     const dy = e.clientY - startRect.clientY;
-    let newW = startRect.width;
-    let newH = startRect.height;
+    let newW = startRect.width, newH = startRect.height;
     let adjL = 0, adjT = 0;
     
     if (resizeDir.includes('right')) newW = Math.max(30, startRect.width + dx);
-    if (resizeDir.includes('left')) {
-      newW = Math.max(30, startRect.width - dx);
-      adjL = dx;
-    }
+    if (resizeDir.includes('left')) { newW = Math.max(30, startRect.width - dx); adjL = dx; }
     if (resizeDir.includes('bottom')) newH = Math.max(20, startRect.height + dy);
-    if (resizeDir.includes('top')) {
-      newH = Math.max(20, startRect.height - dy);
-      adjT = dy;
-    }
+    if (resizeDir.includes('top')) { newH = Math.max(20, startRect.height - dy); adjT = dy; }
     
     if (newW !== startRect.width) selectedElement.style.width = `${newW}px`;
     if (newH !== startRect.height) selectedElement.style.height = `${newH}px`;
@@ -356,19 +371,15 @@ function iTaposMouse() {
   isResizing = false;
 }
 
-// --- I-UPDATE ANG CODE — PINAGBUTI PARA SA LAHAT ---
+// --- I-UPDATE ANG CODE ---
 function iIupdateCodeMulaSaElement(el) {
   ignoreCodeChange = true;
   
   const tag = el.tagName.toLowerCase();
   const elId = el.id;
   let elClass = (el.className || '')
-    .replace('selectable-element','')
-    .replace('selected-element','')
-    .replace(/resize-handle/g, '')
-    .trim();
+    .replace('selectable-element','').replace('selected-element','').replace(/resize-handle/g, '').trim();
   
-  // Kunin ang istilong ilalagay
   const inlineStyle = [];
   if (el.style.position) inlineStyle.push(`position:${el.style.position}`);
   if (el.style.top) inlineStyle.push(`top:${el.style.top}`);
@@ -381,43 +392,34 @@ function iIupdateCodeMulaSaElement(el) {
   const idAttr = elId ? `id="${elId}"` : '';
   const styleAttr = inlineStyle.length ? `style="${inlineStyle.join('; ')}"` : '';
   
-  // Hanapin at palitan sa code — MAS MABILIS AT TUMPAK
   let code = codeInput.value;
   const lines = code.split('\n');
   let foundAt = -1;
   
-  // Bumuo ng pattern para mahanap
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i];
     if (!line.includes(`<${tag}`)) continue;
     
-    // Kung may ID o Klase, mas tiyak ang paghahanap
     if (elId && line.includes(`id="${elId}"`)) { foundAt = i; break; }
     if (elClass) {
       const firstClass = elClass.split(' ')[0];
       if (line.includes(`class="${firstClass}`) || line.includes(`class='${firstClass}'`)) { foundAt = i; break; }
     }
-    // Kung wala, kunin ang unang tumugma sa tag na walang istilo
     if (foundAt === -1 && !line.includes('style=')) { foundAt = i; }
   }
   
   if (foundAt === -1) return;
   
-  // Palitan ang opening tag
   let line = lines[foundAt];
-  
-  // Alisin ang dating attributes
   line = line.replace(/(\s+)(style|class|id)="[^"]*"/gi, '');
   line = line.replace(/(\s+)(style|class|id)='[^']*'/gi, '');
   
-  // Ilagay ang bago
   const attrs = [classAttr, idAttr, styleAttr].filter(Boolean).join(' ');
   line = line.replace(/<([a-z][a-z0-9]*)(\s+[^>]*)?>/, `<$1${attrs?' '+attrs:''}>`);
   
   lines[foundAt] = line;
   codeInput.value = lines.join('\n');
   
-  // I-highlight
   let pos = 0;
   for (let j = 0; j < foundAt; j++) pos += lines[j].length + 1;
   codeInput.focus();
@@ -428,19 +430,62 @@ function iIupdateCodeMulaSaElement(el) {
   setTimeout(() => { ignoreCodeChange = false; }, 100);
 }
 
-// --- Ipakita ang Katangian ---
+// --- Ipakita ang Katangian + ✅ KONTROL SA AKSYON ---
 function iUpdatePropertyPanel(el) {
   const pos = getComputedStyle(el).position;
+  const tag = el.tagName.toLowerCase();
+  
+  // Alamin kung may nakakabit na aksyon
+  const mayOnclick = el.hasAttribute && el.hasAttribute('onclick');
+  const mayLink = tag === 'a' && el.href;
+  const mayForm = tag === 'form';
+  
   propContent.innerHTML = `
-    <strong>Elemento:</strong> &lt;${el.tagName.toLowerCase()}&gt;<br>
+    <strong>Elemento:</strong> &lt;${tag}&gt;<br>
     <strong>Posisyon:</strong> ${pos}<br>
     <strong>Klase:</strong> ${(el.className||'').replace('selectable-element','').replace('selected-element','').trim() || 'Wala'}<br>
     <strong>ID:</strong> ${el.id || 'Wala'}<br>
     <hr style="margin:8px 0; border:none; border-top:1px solid #444;">
+    
+    <strong>Aksyon:</strong>
+    ${mayOnclick ? '✅ May nakakabit na JavaScript' : ''}
+    ${mayLink ? `🔗 Link: ${el.getAttribute('href')}` : ''}
+    ${mayForm ? '📝 Formularyo' : ''}
+    ${!mayOnclick && !mayLink && !mayForm ? 'Wala' : ''}
+    <br><br>
+    
+    <button id="toggleActions" style="padding:6px 12px; border:none; border-radius:4px; cursor:pointer; font-weight:bold; background:${actionsEnabled?'#4ecdc4':'#ff6b6b'}; color:white;">
+      ${actionsEnabled ? '🔓 Aksyon: NAKABUKAS' : '🔒 Aksyon: NAKASARA (Pumili Muna)'}
+    </button>
+    
+    <br><br>
     <strong>Lokasyon:</strong> Top: ${Math.round(parseFloat(el.style.top)) || 'Auto'}px | Left: ${Math.round(parseFloat(el.style.left)) || 'Auto'}px<br>
     <strong>Sukat:</strong> ${Math.round(el.offsetWidth)}px × ${Math.round(el.offsetHeight)}px<br>
-    <em>✅ Hilahin kahit ano — awtomatikong nagiging ililipat!</em>
+    <em>💡 Kapag NAKASARA: Pipiliin lang ang elemento. Kapag NAKABUKAS: Tumatakbo ang orihinal na kilos.</em>
   `;
+  
+  // Ikabit ang pindutan ng pagpapalit
+  setTimeout(() => {
+    const btn = document.getElementById('toggleActions');
+    if (btn) btn.onclick = iPalitanAksyonMode;
+  }, 10);
+}
+
+// --- ✅ BUKAS/SARA ANG AKSYON ---
+function iPalitanAksyonMode() {
+  actionsEnabled = !actionsEnabled;
+  
+  // I-refresh para magkabisa agad
+  const doc = previewFrame.contentDocument;
+  if (doc) iIpaganaOIpigilanAksyon(doc);
+  
+  // I-update ang panel
+  if (selectedElement) iUpdatePropertyPanel(selectedElement);
+  
+  alert(actionsEnabled 
+    ? '🔓 NAKABUKAS na ang mga aksyon — tatawagin na ang mga link at function kapag pinindot!' 
+    : '🔒 NAKASARA na ang mga aksyon — pipiliin muna ang elemento bago magpatakbo ng anuman.'
+  );
 }
 
 // --- Hanapin sa Code ---
