@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="tl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dola Visual Editor</title>
+  <link rel="stylesheet" href="editor.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Itaas na Bahagi: Mga Pindutan -->
+    <header class="toolbar">
+      <h1>🛠️ Dola Visual Editor</h1>
+      <div class="toolbar-buttons">
+        <button id="btnNew">📄 Bago</button>
+        <button id="btnSave">💾 I-save</button>
+        <button id="btnExport">📦 I-download</button>
+      </div>
+    </header>
+
+    <!-- Gitnang Bahagi: Hati-tingnan -->
+    <main class="workspace">
+      <!-- Kaliwa: Code Editor -->
+      <section class="code-panel">
+        <div class="panel-header">HTML Code</div>
+        <textarea id="codeInput" spellcheck="false"></textarea>
+      </section>
+
+      <!-- Kanan: Preview / Visual Editor -->
+      <section class="preview-panel">
+        <div class="panel-header">Preview</div>
+        <div id="previewArea" class="preview-area">
+          <iframe id="previewFrame" sandbox="allow-same-origin"></iframe>
+        </div>
+      </section>
+    </main>
+
+    <!-- Ibaba: Katangian ng Napiling Bagay -->
+    <aside class="properties-panel">
+      <div class="panel-header">Katangian</div>
+      <div id="propContent" class="prop-content">
+        Pumili ng elemento sa preview para makita ang mga katangian.
+      </div>
+    </aside>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
