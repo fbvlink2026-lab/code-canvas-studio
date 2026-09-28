@@ -1,0 +1,81 @@
+import { create } from 'zustand';
+import { AppState, ProjectFile, EditorNode } from '../types';
+
+// Helper to generate unique IDs
+const generateId = () => Math.random().toString(36).substr(2, 9);
+
+// Initial Dummy Data for Testing
+const initialFiles: ProjectFile[] = [
+  {
+    id: 'file-1',
+    name: 'index.html',
+    extension: '.html',
+    language: 'html',
+    isOpen: true,
+    isDirty: false,
+    content: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My Project</title>
+</head>
+<body>
+  <div id="app" class="container">
+    <h1>Hello GUI Editor</h1>
+    <p>This is a paragraph.</p>
+    <button class="primary-btn">Click Me</button>
+  </div>
+</body>
+</html>`
+  },
+  {
+    id: 'file-2',
+    name: 'style.css',
+    extension: '.css',
+    language: 'css',
+    isOpen: false,
+    isDirty: false,
+    content: `.container { padding: 20px; }\nh1 { color: blue; }`
+  }
+];
+
+export const useEditorStore = create<AppState>((set, get) => ({
+  // --- Initial State ---
+  files: initialFiles,
+  activeFileId: 'file-1',
+  selectedNodeId: null,
+  hoveredNodeId: null,
+  past: [],
+  future: [],
+
+  // --- Actions Implementation ---
+
+  /**
+   * Switches the active file tab.
+   */
+  setActiveFile: (fileId: string) => set({ activeFileId: fileId }),
+
+  /**
+   * Updates the raw content of a specific file.
+   * Note: In a full implementation, this would also trigger re-parsing into EditorNodes.
+   */
+  updateFileContent: (fileId: string, newContent: string) => set((state) => ({
+    files: state.files.map(f => 
+      f.id === fileId ? { ...f, content: newContent, isDirty: true } : f
+    )
+  })),
+
+  /**
+   * Sets the currently selected element on the Canvas.
+   * This triggers the Property Inspector to show details and the Code Editor to highlight lines.
+   */
+  selectNode: (nodeId: string | null) => set({ selectedNodeId: nodeId }),
+
+  /**
+   * Highlights an element on hover without selecting it.
+   */
+  hoverNode: (nodeId: string | null) => set({ hoveredNodeId: nodeId }),
+  
+  // Placeholder for future complex actions like undo/redo which require snapshotting the tree
+  // We will implement the Tree Parser in the next step to populate these properly.
+}));
