@@ -1,0 +1,106 @@
+import React, { memo } from 'react';
+import { EditorNode } from '../../types';
+import { useEditorStore } from '../../store/useEditorStore';
+
+interface NodeRendererProps {
+  node: EditorNode;
+  depth?: number;
+}
+
+const VOID_ELEMENTS = ['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'];
+
+export const NodeRenderer: React.FC<NodeRendererProps> = memo(({ node }) => {
+  const selectNode = useEditorStore((state) => state.selectNode);
+  const hoverNode = useEditorStore((state) => state.hoverNode);
+  const isSelected = useEditorStore((state) => state.selectedNodeId === node.id);
+  const isHovered = useEditorStore((state) => state.hoveredNodeId === node.id);
+
+  // Handle Click Selection
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent clicking parent elements behind this one
+    selectNode(node.id);
+  };
+
+  // Handle Hover Highlighting
+  const handleMouseEnter = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    hoverNode(node.id);
+  };
+
+  const handleMouseLeave = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    hoverNode(null);
+  };
+
+  // Base Styles for Interaction Feedback
+  const interactionStyles: React.CSSProperties = {
+    outline: isSelected ? '2px solid #3b82f6' : isHovered ? '1px dashed #9ca3af' : 'none',
+    outlineOffset: '2px',
+    cursor: 'pointer',
+    position: 'relative', // Needed for absolute positioning of resize handles later
+    minWidth: node.type === 'element' ? '20px' : undefined, // Ensure empty divs are clickable
+    minHeight: node.type === 'element' ? '20px' : undefined,
+  };
+
+  // Merge user-defined styles with editor interaction styles
+  const finalStyle = { ...node.styles, ...interactionStyles };
+
+  if (node.type === 'text') {
+    return (
+      <span 
+        onClick={handleClick}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        style={{ 
+          backgroundColor: isSelected ? '#dbeafe' : 'transparent',
+          borderRadius: '2px',
+          padding: '0 2px'
+        }}
+      >
+        {node.textContent}
+      </span>
+    );
+  }
+
+  if (node.type === 'element') {
+    const Tag = node.tagName as keyof JSX.IntrinsicElements;
+    const isVoid = VOID_ELEMENTS.includes(node.tagName || '');
+
+    // Filter out internal editor attributes for actual rendering
+    // We keep data-editor-id so we can map back, but browsers ignore unknown attrs usually.
+    // However, for cleanliness in DOM inspection, we might want to hide them if possible, 
+    // but since we need them for logic, we pass them through.
+    
+    const props: any = {
+      ...node.attributes,
+      style: finalStyle,
+      onClick: handleClick,
+      onMouseEnter: handleMouseEnter,
+      onMouseLeave: handleMouseLeave,
+    };
+
+    // Special handling for images to prevent broken links blocking view
+    if (Tag === 'img') {
+      props.onError = (e: any) => {
+        e.target.style.backgroundColor = '#fee2e2';
+        e.target.alt = 'Broken Image';
+      };
+    }
+
+    if (isVoid) {
+      return <Tag {...props} />;
+    }
+
+    return (
+      <Tag {...props}>
+        {node.children.map((child) => (
+          <NodeRenderer key={child.id} node={child} />
+        ))}
+      </Tag>
+    );
+  }
+
+  return null;
+});
+
+NodeRenderer.displayName = 'NodeRenderer';
