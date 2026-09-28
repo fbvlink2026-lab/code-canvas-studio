@@ -1,0 +1,63 @@
+import { EditorNode } from '../../types';
+
+/**
+ * Converts an EditorNode tree back into an HTML string.
+ */
+export const serializeTreeToHtml = (node: EditorNode): string => {
+  if (node.type === 'text') {
+    // Escape special characters for safety
+    return escapeHtml(node.textContent || '');
+  }
+
+  if (node.type === 'element') {
+    const tag = node.tagName;
+    
+    // Build Attribute String
+    const attrStrings = Object.entries(node.attributes)
+      .filter(([key]) => !key.startsWith('data-editor')) // Remove internal IDs before saving/exporting? 
+      // NOTE: For LIVE editing sync, we KEEP data-editor-id so we can map clicks back to code.
+      // We only strip them when doing "Final Export". 
+      // So here, we keep them.
+      .map(([key, value]) => `${key}="${escapeAttr(value)}"`)
+      .join(' ');
+
+    const openTag = `<${tag}${attrStrings ? ' ' + attrStrings : ''}>`;
+    
+    // Self-closing tags check (void elements)
+    const voidElements = ['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'];
+    if (voidElements.includes(tag)) {
+      return openTag.replace('>', '/>');
+    }
+
+    // Render Children
+    const childrenHtml = node.children.map(child => serializeTreeToHtml(child)).join('');
+    
+    const closeTag = `</${tag}>`;
+    
+    return `${openTag}${childrenHtml}${closeTag}`;
+  }
+
+  return '';
+};
+
+/**
+ * Strips all 'data-editor-id' attributes for final production export.
+ */
+export const cleanForExport = (htmlString: string): string => {
+  // Regex to remove data-editor-id="..."
+  return htmlString.replace(/ data-editor-id="[^"]*"/g, '');
+};
+
+// Helpers
+const escapeHtml = (unsafe: string) => {
+  return unsafe
+     .replace(/&/g, "&amp;")
+     .replace(/</g, "&lt;")
+     .replace(/>/g, "&gt;")
+     .replace(/"/g, "&quot;")
+     .replace(/'/g, "&#039;");
+};
+
+const escapeAttr = (value: string) => {
+  return value.replace(/"/g, '&quot;');
+};
