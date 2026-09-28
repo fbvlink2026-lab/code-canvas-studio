@@ -1,0 +1,90 @@
+import React, { useEffect } from 'react';
+import { useEditorStore } from '../../store/useEditorStore';
+import { NodeRenderer } from './NodeRenderer';
+
+export const VisualCanvas: React.FC = () => {
+  const rootNode = useEditorStore((state) => state.rootNode);
+  const activeFileId = useEditorStore((state) => state.activeFileId);
+  const files = useEditorStore((state) => state.files);
+  const loadFileContent = useEditorStore((state) => state.loadFileContent);
+
+  // Load tree when active file changes
+  useEffect(() => {
+    if (activeFileId) {
+      loadFileContent(activeFileId);
+    }
+  }, [activeFileId, loadFileContent]);
+
+  // Check if active file is HTML
+  const activeFile = files.find(f => f.id === activeFileId);
+  const isHtml = activeFile?.language === 'html';
+
+  if (!isHtml) {
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-100 text-gray-500">
+        <p>Select an HTML file to view the canvas.</p>
+      </div>
+    );
+  }
+
+  if (!rootNode) {
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-100 text-gray-400 animate-pulse">
+        <p>Loading Canvas...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full w-full bg-white overflow-auto relative shadow-inner">
+      {/* 
+         We render the children of the root <html> tag directly, 
+         skipping <head> usually for the visual body view, 
+         BUT our parser wraps everything. 
+         Ideally, we should only render the BODY content in the main canvas area.
+         
+         Let's assume the parser returns the full document. 
+         For MVP simplicity, we render the whole tree. 
+         In production, we'd filter for tagName === 'body'.
+      */}
+      
+      {/* Find Body Node to render only visible content */}
+      {(() => {
+        // Simple search for body in the immediate children of root (which is html)
+        // Our root is virtual 'html', its child is real 'html' tag? 
+        // Wait, parseHtmlToTree creates a virtual root 'html' containing the real docElement.
+        
+        let bodyNode = null;
+        const findBody = (node: typeof rootNode) => {
+          if(!node) return;
+          if(node.tagName === 'body') {
+            bodyNode = node;
+            return;
+          }
+          node.children.forEach(findBody);
+        };
+        
+        findBody(rootNode);
+
+        if (bodyNode) {
+           // Render Body's children directly into a styled container
+           return (
+             <div className="min-h-screen p-8">
+               {bodyNode.children.map(child => (
+                 <NodeRenderer key={child.id} node={child} />
+               ))}
+             </div>
+           );
+        }
+        
+        // Fallback if no body found (fragment?)
+        return (
+           <div className="p-4">
+             <NodeRenderer node={rootNode} />
+           </div>
+        );
+      })()}
+
+    </div>
+  );
+};
